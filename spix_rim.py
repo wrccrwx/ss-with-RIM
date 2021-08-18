@@ -62,7 +62,7 @@ class CNNRIM(nn.Module):
         self.use_coord_feat = True
         self.use_enforce_conn = use_enforce_conn
         if not use_coord_feat:
-            in_c = inc - 2
+            in_c = in_c - 2
             self.use_coord_feat = False
         
         for i in range(n_layers-1):
