@@ -44,7 +44,11 @@ class CNNRIM(nn.Module):
         use_last_inorm: bool
             if True, use instance normalization layer for output
     """
-    def __init__(self, in_c=5, n_spix=100, n_filters=32, n_layers=5, use_recons=True, use_last_inorm=True):
+    def __init__(self, 
+                 in_c=5, n_spix=100, n_filters=32, 
+                 n_layers=5, use_recons=True, use_last_inorm=True,
+                 use_coord_feat=True, use_enforce_conn=True,
+                ):
         super().__init__()
         self.n_spix = n_spix
         self.use_last_inorm = use_last_inorm
@@ -54,6 +58,13 @@ class CNNRIM(nn.Module):
             out_c += 3
 
         layers = []
+        
+        self.use_coord_feat = True
+        self.use_enforce_conn = use_enforce_conn
+        if not use_coord_feat:
+            in_c = inc - 2
+            self.use_coord_feat = False
+        
         for i in range(n_layers-1):
             layers.append(conv_in_relu(in_c, n_filters << i))
             in_c = n_filters << i
@@ -135,10 +146,12 @@ class CNNRIM(nn.Module):
 
     def __preprocess(self, image, device="cuda"):
         image = torch.from_numpy(image).permute(2, 0, 1).float()[None]
-        h, w = image.shape[-2:]
-        coord = torch.stack(torch.meshgrid(torch.arange(h), torch.arange(w))).float()[None]
-
-        input = torch.cat([image, coord], 1).to(device)
+        if self.use_coord_feat:
+            h, w = image.shape[-2:]
+            coord = torch.stack(torch.meshgrid(torch.arange(h), torch.arange(w))).float()[None]
+            input = torch.cat([image, coord], 1).to(device)
+        else:
+            input = image.to(device)
         input = (input - input.mean((2, 3), keepdim=True)) / input.std((2, 3), keepdim=True)
         return input
 
@@ -208,8 +221,10 @@ class CNNRIM(nn.Module):
         segment_size = spix.size / self.n_spix
         min_size = int(0.06 * segment_size)
         max_size = int(3.0 * segment_size)
-        spix = _enforce_label_connectivity_cython(
-            spix[None], min_size, max_size)[0]
+        
+        if self.use_enforce_conn:
+            spix = _enforce_label_connectivity_cython(
+                spix[None], min_size, max_size)[0]
 
         return spix
 
